@@ -15,7 +15,14 @@ namespace Stacklands2KExpanded
         [HarmonyPostfix]
         private static void AddCards(List<CardData> __result)
         {
-            CardLoader.AddCards(__result);
+            try
+            {
+                CardLoader.AddCards(__result);
+            }
+            catch (Exception e)
+            {
+                Plugin.StaticLogger.LogException("Failed to load mod cards: " + e);
+            }
         }
 
         /// <summary>
@@ -25,15 +32,89 @@ namespace Stacklands2KExpanded
         /// <param name="card">The checked card.</param>
         /// <returns>True if the card is valid, or base validity check result if not.</returns>
         [HarmonyPatch(typeof(IndustrialSmelter), nameof(IndustrialSmelter.CanHaveCard))]
-        [HarmonyPrefix]
-        private static bool CanHaveCard(IndustrialSmelter __instance, CardData card)
+        [HarmonyPostfix]
+        private static void CanHaveCard(ref bool __result, CardData otherCard)
         {
-            if (card.Id == Consts.SILVER_ORE)
+            if (otherCard.Id == Consts.SILVER_ORE)
             {
-                return true;
+                __result = true;
+            }
+        }
+
+        [HarmonyPatch(typeof(SokLoc), nameof(SokLoc.SetLanguage))]
+        [HarmonyPostfix]
+        public static void LanguageChanged(SokLoc __instance)
+        {
+            if (SokLoc.instance == null)
+            {
+                return;
             }
 
-            return __instance.CanHaveCard(card);
+            foreach (var term in CardLoader.Translations)
+            {
+                SokLoc.instance.CurrentLocSet.TermLookup[term.Id] = term;
+            }
+        }
+
+        static List<string> debugCheckCards = new List<string>
+        {
+            Consts.INDUSTRIAL_ELECTROLYSER
+        };
+
+        [HarmonyPatch(typeof(Subprint), nameof(Subprint.StackMatchesSubprint))]
+        [HarmonyPrefix]
+        private static void StackMatchesSubprintPrefix(Subprint __instance, GameCard rootCard)
+        {
+            if (rootCard == null) return;
+
+            if (!debugCheckCards.Contains(rootCard.CardData.Id))
+            {
+                return;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("[SubprintDebug] Checking stack for recipe: ")
+              .Append(__instance.StatusTerm)
+              .Append(" Required: [")
+              .Append(string.Join(", ", __instance.RequiredCards))
+              .Append("] RootCard: ").Append(rootCard.CardData.Id);
+
+            // Build current stack snapshot (top to bottom)
+            var stackIds = new List<string>();
+            var cursor = rootCard;
+            while (cursor != null)
+            {
+                stackIds.Add(cursor.CardData.Id);
+                cursor = cursor.Child;
+            }
+            sb.Append(" Stack: [").Append(string.Join(" -> ", stackIds)).Append("]");
+
+            Plugin.StaticLogger.Log(sb.ToString());
+        }
+
+        [HarmonyPatch(typeof(Subprint), nameof(Subprint.StackMatchesSubprint))]
+        [HarmonyPostfix]
+        private static void StackMatchesSubprintPostfix(Subprint __instance, GameCard rootCard, ref SubprintMatchInfo matchInfo, bool __result)
+        {
+            if (rootCard == null) return;
+
+            if (!debugCheckCards.Contains(rootCard.CardData.Id))
+            {
+                return;
+            }
+
+            if (__result)
+            {
+                Plugin.StaticLogger.Log($"[SubprintDebug] SUCCESS for '{__instance.StatusTerm}'");
+            }
+            else
+            {
+                // missingCards was populated inside the method; copy current state.
+                var missing = (__instance.missingCards != null && __instance.missingCards.Count > 0)
+                    ? string.Join(", ", __instance.missingCards)
+                    : "(none or early exit)";
+                Plugin.StaticLogger.Log($"[SubprintDebug] FAIL for '{__instance.StatusTerm}' Missing/Unmatched: {missing}");
+            }
         }
     }
 }

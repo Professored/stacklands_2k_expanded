@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using Newtonsoft.Json;
 
 namespace Stacklands2KExpanded
 {
@@ -17,6 +18,7 @@ namespace Stacklands2KExpanded
 
         public static void AddCards(List<CardData> allCards)
         {
+            //General top-level handler for exception handling on cards - mostly for debugging.
             var log = Plugin.StaticLogger;
 
             cardContainer = new GameObject("CardContainer - CompactStorage");
@@ -24,66 +26,87 @@ namespace Stacklands2KExpanded
 
             foreach (var c in CardDefs.Cards)
             {
-                log.Log("Adding card: " + c.Id);
-                var go = new GameObject(c.Id);
-                go.transform.SetParent(cardContainer.transform);
-                var card = (CardData)go.AddComponent(c.ScriptType);
-                card.Id = c.Id;
-                card.NameTerm = c.Id;
-                AddTranslation(card.NameTerm, c.Name);
-                card.DescriptionTerm = c.Id + "_desc";
-                AddTranslation(card.DescriptionTerm, c.Description);
-                var path = Path.Combine(Plugin.Instance.Path, "icons", c.Id + ".png");
-                if (File.Exists(path))
+                try
                 {
-                    var tex = new Texture2D(1024, 1024, TextureFormat.RGBA32, false);
-                    //tex.LoadImage(File.ReadAllBytes(path));
-                    tex.LoadRawTextureData(File.ReadAllBytes(path));
-                    card.Icon = Sprite.Create(tex, new Rect(0, 0, 1024, 1024), new Vector2(0.5f, 0.5f));
+                    log.Log("Adding card: " + c.Id);
+                    var go = new GameObject(c.Id);
+                    go.transform.SetParent(cardContainer.transform);
+                    var card = (CardData)go.AddComponent(c.ScriptType);
+                    card.Id = c.Id;
+                    card.NameTerm = c.Id;
+                    log.Log($"Adding translation: {card.NameTerm}::{c.Name}");
+                    AddTranslation(card.NameTerm, c.Name);
+                    card.DescriptionTerm = c.Id + "_desc";
+                    AddTranslation(card.DescriptionTerm, c.Description);
+                    var path = Path.Combine(Plugin.Instance.Path, "icons", c.Id + ".raw");
+                    if (File.Exists(path))
+                    {
+                        var tex = new Texture2D(1024, 1024, TextureFormat.RGB24, false);
+                        
+                        card.Icon = Sprite.Create(tex, new Rect(0, 0, 1024, 1024), new Vector2(0.5f, 0.5f));
+                    }
+                    card.Value = c.Value;
+                    card.MyCardType = c.CardType;
+                    card.IsBuilding = c.IsBuilding;
+                    card.CardUpdateType = CardUpdateType.Mod;
+                    if (c.CardType == CardType.Structures)
+                    {
+                        card.PickupSoundGroup = PickupSoundGroup.Heavy;
+                    }
+                    if (c.Init != null)
+                        c.Init(card);
+                    if (c.CustomColour != null)
+                    {
+                        card.MyPalette = c.CustomColour;
+                    }
+                    if (c.Connections != null)
+                    {
+                        card.EnergyConnectors = c.Connections;
+                    }
+                    allCards.Add(card);
                 }
-                card.Value = c.Value;
-                card.MyCardType = c.CardType;
-                card.IsBuilding = c.IsBuilding;
-                card.CardUpdateType = CardUpdateType.Mod;
-                if (c.CardType == CardType.Structures)
+                catch (Exception e)
                 {
-                    card.PickupSoundGroup = PickupSoundGroup.Heavy;
+                    log.Log("Error adding card: " + e);
+                    throw;
                 }
-                if (c.Init != null)
-                    c.Init(card);
-                if (c.CustomColour != null)
-                {
-                    card.MyPalette = c.CustomColour;
-                }
-                if (c.Connections != null)
-                {
-                    card.EnergyConnectors = c.Connections;
-                }
-                allCards.Add(card);
             }
 
             foreach (var idea in CardDefs.Ideas)
             {
-                var id = Consts.Idea(idea.Name);
-                var go = new GameObject(id);
-                go.transform.SetParent(cardContainer.transform);
-                var card = go.AddComponent<Blueprint>();
-                card.Id = id;
-                card.NameTerm = idea.Name;
-                card.MyCardType = CardType.Ideas;
-                card.BlueprintGroup = idea.Group;
-                card.Subprints = idea.Subprints;
-                card.NeedsExactMatch = idea.NeedsExactMatch;
-                card.CardUpdateType = CardUpdateType.Mod;
-                foreach (var sub in card.Subprints)
+                var id = idea.Id;
+                try
                 {
-                    var term = Consts.PREFIX + sub.StatusTerm.Replace(" ", "").ToLower();
-                    AddTranslation(term, sub.StatusTerm);
-                    sub.StatusTerm = term;
+                    log.Log("Adding idea card: " + idea.Name);
+                    var go = new GameObject(id);
+                    go.transform.SetParent(cardContainer.transform);
+                    var card = go.AddComponent<Blueprint>();
+                    card.Id = id;
+                    card.NameTerm = idea.Id;
+                    card.DescriptionTerm = idea.Id + "_desc";
+                    card.ResultDescriptionTerm = idea.Id + "_result_desc";
+                    AddTranslation(id, idea.Name);
+                    AddTranslation(card.DescriptionTerm, idea.Description);
+                    card.MyCardType = CardType.Ideas;
+                    card.BlueprintGroup = idea.Group;
+                    card.CombineResultCards = true;
+                    card.NeedsExactMatch = idea.NeedsExactMatch;
+                    card.CardUpdateType = CardUpdateType.Mod;
+                    foreach (var sub in card.Subprints)
+                    {
+                        var term = idea.Id + "_status_desc";
+                        AddTranslation(term, sub.StatusTerm);
+                        sub.StatusTerm = term;
+                        card.Subprints.Add(sub);
+                    }
+                    allCards.Add(card);
                 }
-                allCards.Add(card);
-                
-            }
+                catch (Exception e)
+                {
+                    log.LogException($"Error adding idea card ({id}): {e}");
+                    throw;
+                }
+            }            
         }
     }
 }

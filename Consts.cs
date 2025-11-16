@@ -18,6 +18,10 @@ namespace Stacklands2KExpanded
         public const string ELEMENTAL_HYDROGEN = PREFIX + "hydrogen";
         public const string ELEMENTAL_OXYGEN = PREFIX + "oxygen";
 
+        public const string IDEA_ELECTROLYSIS = PREFIX + "electrolysis" + IDEA;
+        public const string IDEA_SILVER_SMELT = PREFIX + "silver_smelting" + IDEA;
+        public const string IDEA_INDUSTRIAL_ELECTROLYSER = PREFIX + "industrial_electrolyser" + IDEA;
+
         public const string COIN = "gold";
         public const string SHELL = "shell";
 
